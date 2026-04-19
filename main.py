@@ -53,7 +53,7 @@ ORDER BY CAST(p.amount AS REAL) DESC
 """
 df_payment = pd.read_sql(query_payment, conn)
 
-# Query for df_credit: Join, group, filter with HAVING, sort
+# Query for df_credit: Join, group, filter with HAVING, sort by creditLimit
 query_credit = """
 SELECT c.contactFirstName as firstName, c.contactLastName as lastName, c.creditLimit, COUNT(o.orderNumber) as num_orders
 FROM customers c
@@ -74,7 +74,7 @@ ORDER BY totalunits DESC
 """
 df_product_sold = pd.read_sql(query_product_sold, conn)
 
-# Query for df_total_customers: Multiple joins, distinct, group, sort
+# Query for df_total_customers: Multiple joins with DISTINCT
 query_total_customers = """
 SELECT p.productCode, p.productName, COUNT(DISTINCT c.customerNumber) as numpurchasers
 FROM products p
