@@ -4,87 +4,117 @@
 import sqlite3
 import pandas as pd
 
-# Connect to the database
-conn = sqlite3.connect('data.sqlite')
+# Connect to the database (assuming 'classicmodels.db' is in the same directory)
+conn = sqlite3.connect('classicmodels.db')
 
-pd.read_sql("""SELECT * FROM sqlite_master""", conn)
+# Query for df_boston: Join employees and offices, filter by city using WHERE
+query_boston = """
+SELECT e.firstName, e.lastName
+FROM employees e
+JOIN offices o ON e.officeCode = o.officeCode
+WHERE o.city = 'Boston'
+"""
+df_boston = pd.read_sql(query_boston, conn)
 
-# helper to inspect available tables and read flexible table names
-tables = set(pd.read_sql("SELECT name FROM sqlite_master WHERE type='table'", conn)['name'])
+# Query for df_zero_emp: Group by officeCode, filter aggregates using HAVING (returns 0 rows as no office has 0 employees)
+query_zero_emp = """
+SELECT officeCode, COUNT(employeeNumber) as num_emp
+FROM employees
+GROUP BY officeCode
+HAVING num_emp = 0
+"""
+df_zero_emp = pd.read_sql(query_zero_emp, conn)
 
-def find_table(candidates):
-    for c in candidates:
-        if c in tables:
-            return c
-    return None
+# Query for df_employee: Left join employees and offices, retain all from employees
+query_employee = """
+SELECT e.firstName, e.lastName, e.employeeNumber, o.city
+FROM employees e
+LEFT JOIN offices o ON e.officeCode = o.officeCode
+ORDER BY e.firstName
+"""
+df_employee = pd.read_sql(query_employee, conn)
 
-def read_table(candidates):
-    t = find_table(candidates)
-    return pd.read_sql(f"SELECT * FROM {t}", conn) if t else pd.DataFrame()
+# Query for df_contacts: Left join customers and orders, filter for customers with no orders
+query_contacts = """
+SELECT c.contactFirstName, c.contactLastName, c.customerNumber, c.country
+FROM customers c
+LEFT JOIN orders o ON c.customerNumber = o.customerNumber
+WHERE o.orderNumber IS NULL
+ORDER BY c.contactFirstName
+"""
+df_contacts = pd.read_sql(query_contacts, conn)
 
-# STEP 1
-# Replace None with your code
-# customers table (used by several steps)
-df_customers = read_table(['customers', 'customer', 'clients', 'client'])
+# Query for df_payment: Cast amount to REAL for proper sorting
+query_payment = """
+SELECT c.contactFirstName, p.checkNumber, CAST(p.amount AS REAL) as amount, p.paymentDate
+FROM payments p
+JOIN customers c ON p.customerNumber = c.customerNumber
+ORDER BY CAST(p.amount AS REAL) DESC
+"""
+df_payment = pd.read_sql(query_payment, conn)
 
-# derive Boston customers from customers dataframe if possible
-if not df_customers.empty and 'city' in df_customers.columns:
-    df_boston = df_customers[df_customers['city'].astype(str).str.contains('Boston', na=False)]
-else:
-    df_boston = pd.DataFrame()
+# Query for df_credit: Join, group, filter with HAVING, sort
+query_credit = """
+SELECT c.contactFirstName as firstName, c.contactLastName as lastName, c.creditLimit, COUNT(o.orderNumber) as num_orders
+FROM customers c
+JOIN orders o ON c.customerNumber = o.customerNumber
+GROUP BY c.customerNumber
+HAVING COUNT(o.orderNumber) > 5
+ORDER BY c.creditLimit DESC
+"""
+df_credit = pd.read_sql(query_credit, conn)
 
-# STEP 2
-# Replace None with your code
-# find companies/employers table and filter where employee count == 0
-df_companies = read_table(['companies', 'company', 'businesses', 'business'])
-df_zero_emp = pd.DataFrame()
-if not df_companies.empty:
-    for col in ['num_employees', 'employee_count', 'employees', 'employees_count']:
-        if col in df_companies.columns:
-            df_zero_emp = df_companies[df_companies[col] == 0]
-            break
+# Query for df_product_sold: Join, group, aggregate, sort
+query_product_sold = """
+SELECT p.productCode, p.productName, SUM(od.quantityOrdered) as totalunits
+FROM products p
+JOIN orderdetails od ON p.productCode = od.productCode
+GROUP BY p.productCode
+ORDER BY totalunits DESC
+"""
+df_product_sold = pd.read_sql(query_product_sold, conn)
 
-# STEP 3
-# Replace None with your code
-df_employee = read_table(['employees', 'employee', 'staff'])
+# Query for df_total_customers: Multiple joins, distinct, group, sort
+query_total_customers = """
+SELECT p.productCode, p.productName, COUNT(DISTINCT c.customerNumber) as numpurchasers
+FROM products p
+JOIN orderdetails od ON p.productCode = od.productCode
+JOIN orders o ON od.orderNumber = o.orderNumber
+JOIN customers c ON o.customerNumber = c.customerNumber
+GROUP BY p.productCode
+ORDER BY numpurchasers DESC
+"""
+df_total_customers = pd.read_sql(query_total_customers, conn)
 
-# STEP 4
-# Replace None with your code
-df_contacts = read_table(['contacts', 'contact', 'contact_details'])
+# Query for df_customers: Group by country, count customers
+query_customers = """
+SELECT country, COUNT(customerNumber) as n_customers
+FROM customers
+GROUP BY country
+ORDER BY n_customers DESC
+"""
+df_customers = pd.read_sql(query_customers, conn)
 
-# STEP 5
-# Replace None with your code
-df_payment = read_table(['payments', 'payment', 'payment_methods'])
+# Query for df_under_20: Subquery to filter customers who ordered products with buyPrice < 20
+query_under_20 = """
+SELECT c.customerNumber, c.contactFirstName as firstName, c.contactLastName, c.city, c.country
+FROM customers c
+WHERE c.customerNumber IN (
+    SELECT o.customerNumber
+    FROM orders o
+    WHERE o.orderNumber IN (
+        SELECT od.orderNumber
+        FROM orderdetails od
+        WHERE od.productCode IN (
+            SELECT p.productCode
+            FROM products p
+            WHERE p.buyPrice < 20
+        )
+    )
+)
+ORDER BY c.contactFirstName
+"""
+df_under_20 = pd.read_sql(query_under_20, conn)
 
-# STEP 6
-# Replace None with your code
-df_credit = read_table(['credit', 'credits', 'credit_cards', 'credit_card'])
-
-# STEP 7
-# Replace None with your code
-df_product_sold = read_table(['product_sold', 'products_sold', 'product_sales', 'product_sold'])
-
-# STEP 8
-# Replace None with your code
-# total customers per city (if city exists)
-if not df_customers.empty and 'city' in df_customers.columns:
-    df_total_customers = df_customers.groupby('city').size().reset_index(name='total_customers')
-else:
-    df_total_customers = pd.DataFrame()
-
-# STEP 9
-# Replace None with your code
-# df_customers already loaded above; keep a copy
-# if it wasn't found, ensure variable exists
-if df_customers.empty:
-    df_customers = read_table(['customers', 'customer', 'clients', 'client'])
-
-# STEP 10
-# Replace None with your code
-# customers under 20 (derived from customers if age column exists)
-if not df_customers.empty and 'age' in df_customers.columns:
-    df_under_20 = df_customers[df_customers['age'] < 20]
-else:
-    df_under_20 = pd.DataFrame()
-
+# Close the connection
 conn.close()
