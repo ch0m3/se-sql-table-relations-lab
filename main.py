@@ -5,7 +5,7 @@ import sqlite3
 import pandas as pd
 
 # Connect to the database (assuming 'classicmodels.db' is in the same directory)
-conn = sqlite3.connect('classicmodels.db')
+conn = sqlite3.connect('data.sqlite')
 
 # Query for df_boston: Join employees and offices, filter by city using WHERE
 query_boston = """
